@@ -80,11 +80,12 @@ def diff_deploy(
         ).execute()
 
     local_branches_without_selected.remove(source)
-    target = inquirer.select(
-        message="Select branch to apply the diff to:",
-        choices=local_branches_without_selected,
-        default=None,
-    ).execute() if target is None
+    if target is None:
+        target = inquirer.select(
+            message="Select branch to apply the diff to:",
+            choices=local_branches_without_selected,
+            default=None,
+        ).execute()
 
     with console.status("Generating source delta..."):
         sgd_response = sfdx_sgd(source, target)
@@ -100,7 +101,6 @@ def diff_deploy(
         )
         error = json.loads(output).get("result").get("error")
         console.log(error, style="blink red")
-        # console.print_json(output)
         raise typer.Exit()
 
     console.rule("Org selection")
