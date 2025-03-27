@@ -8,7 +8,9 @@ import click.shell_completion
 import typer
 from InquirerPy import inquirer
 from rich.console import Console
-from rich.json import JSON
+from rich.pretty import pprint
+from rich.table import Table
+
 
 from git_commands import git_checkout, git_get_branches
 from sfdx_commands import (
@@ -19,6 +21,7 @@ from sfdx_commands import (
     sfdx_get_orgs,
     sfdx_sgd,
 )
+from utils import component_failures_table
 
 
 console = Console()
@@ -112,13 +115,13 @@ def diff_deploy(
 
     validate: bool = typer.confirm("Do you want to validate the deployment?")
     message: str = (
-        f"{'Validating deployment' if validate else 'Deploying'} to org {selected_org}..."
+        f"{'Validating deployment' if validate else 'Deploying'} to org '{selected_org}'..."
     )
 
     if output_dir:
-        with console.status(f"Checking out source branch {source}..."):
-            git_checkout(source).stdout.decode("utf-8")
-            sleep(2)
+        typer.secho(f"Checking out source branch {source}...", fg=typer.colors.YELLOW)
+        git_checkout(source)
+
         manifest_file: str = os.path.join(output_dir, "package/package.xml")
         with console.status(message):
             deploy = sfdx_deploy(manifest_file, selected_org, validate)
@@ -128,7 +131,6 @@ def diff_deploy(
                 f"{'Validation' if validate else 'Deployment'} successful!",
                 fg=typer.colors.GREEN,
             )
-            deploy_id = deploy_result.get("result").get("id")
 
             if validate and typer.confirm(
                 "Do you want to continue with the deployment?"
@@ -147,10 +149,15 @@ def diff_deploy(
                     )
 
         else:
+            # pprint(deploy_result)
             typer.secho(
                 "An error occurred while deploying.", err=True, fg=typer.colors.RED
             )
-            typer.secho(f"{deploy_result.get('name')}: {deploy_result.get('message')}")
+            component_failures: dict = (
+                deploy_result.get("result").get("details").get("componentFailures")
+            )
+            table: Table = component_failures_table(component_failures)
+            console.print(table)
 
 
 if __name__ == "__main__":
