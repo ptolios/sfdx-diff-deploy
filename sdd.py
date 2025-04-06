@@ -75,7 +75,7 @@ def diff_deploy(
 
     branches_info: dict = git_get_branches()
     local_branches: list[str] = branches_info.get("branches")
-    current_branch: str = branches_info.get("default")
+    current_branch: str = branches_info.get("current")
     local_branches_without_selected: list[str] = local_branches.copy()
 
     if source is None:
@@ -136,6 +136,10 @@ def diff_deploy(
 
     # --------------- Select org to deploy to ---------------
     console.rule("Org selection")
+
+    if not typer.confirm("Do you want to proceed with the deployment?"):
+        raise typer.Exit()
+
     selected_org = inquirer.select(
         message="Select an org to deploy to:",
         choices=sfdx_get_orgs(),
