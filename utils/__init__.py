@@ -2,7 +2,7 @@ from rich.table import Table
 import xmltodict
 
 
-def build_table(title, headers: list[dict], rows: list[list]):
+def build_table(title: str, headers: list[dict], rows: list[list]):
     """
     Create a table with the given title, headers, and rows.
     """
