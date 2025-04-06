@@ -100,6 +100,8 @@ def sfdx_deploy(
         manifest_file_path,
         "-o",
         org,
+        "-l",
+        test_level,
         "--json",
     ]
 
