@@ -56,6 +56,14 @@ def diff_deploy(
     source: Annotated[
         str, typer.Argument(help="The source branch or commit sha to diff from.")
     ] = None,
+    generate_manifest_only: Annotated[
+        bool,
+        typer.Option(
+            "--generate-only",
+            "-g",
+            help="Generate the manifest only, without deploying.",
+        ),
+    ] = False,
 ):
     """
     Deploy the diff metadata of two branches, to an org.
@@ -67,7 +75,7 @@ def diff_deploy(
 
     branches_info: dict = git_get_branches()
     local_branches: list[str] = branches_info.get("branches")
-    current_branch: str = branches_info.get("default")
+    current_branch: str = branches_info.get("current")
     local_branches_without_selected: list[str] = local_branches.copy()
 
     if source is None:
@@ -119,8 +127,19 @@ def diff_deploy(
         )
         console.print(table)
 
+    if generate_manifest_only:
+        console.print(
+            f'Manifests generated successfully in folder "{os.path.abspath(output_dir)}". \nNo deployment will be performed.',
+            style="bold green",
+        )
+        raise typer.Exit()
+
     # --------------- Select org to deploy to ---------------
     console.rule("Org selection")
+
+    if not typer.confirm("Do you want to proceed with the deployment?"):
+        raise typer.Exit()
+
     selected_org = inquirer.select(
         message="Select an org to deploy to:",
         choices=sfdx_get_orgs(),
