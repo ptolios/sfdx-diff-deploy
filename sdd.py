@@ -14,6 +14,7 @@ from sfdx_commands import (
     sfdx_check_sf_project,
     sfdx_check_sgd_plugin_installed,
     sfdx_deploy,
+    sfdx_get_default_org,
     sfdx_get_orgs,
     sfdx_sgd,
 )
@@ -64,6 +65,14 @@ def diff_deploy(
             help="Generate the manifest only, without deploying.",
         ),
     ] = False,
+    org: Annotated[
+        str,
+        typer.Option(
+            "--target-org",
+            "-o",
+            help="The org to deploy to. If not specified, the current org will be used and if no current org is set, you will be prompted to select one.",
+        ),
+    ] = None,
 ):
     """
     Deploy the diff metadata of two branches, to an org.
@@ -140,15 +149,20 @@ def diff_deploy(
     if not typer.confirm("Do you want to proceed with the deployment?"):
         raise typer.Exit()
 
-    selected_org = inquirer.select(
-        message="Select an org to deploy to:",
-        choices=sfdx_get_orgs(),
-        default=None,
-    ).execute()
+    if org is None:
+        org = sfdx_get_default_org()
+        if org is None:
+            org = inquirer.select(
+                message="Select an org to deploy to:",
+                choices=sfdx_get_orgs(),
+                default=None,
+            ).execute()
+
+    typer.secho(f"Selected org: {org}", fg=typer.colors.YELLOW)
 
     validate: bool = typer.confirm("Do you want to validate the deployment?")
     message: str = (
-        f"{'Validating deployment' if validate else 'Deploying'} to org '{selected_org}'..."
+        f"{'Validating deployment' if validate else 'Deploying'} to org '{org}'..."
     )
 
     if output_dir:
@@ -157,7 +171,7 @@ def diff_deploy(
 
         manifest_file: str = os.path.join(output_dir, "package/package.xml")
         with console.status(message):
-            deploy = sfdx_deploy(manifest_file, selected_org, validate)
+            deploy = sfdx_deploy(manifest_file, org, validate)
             deploy_result = json.loads(deploy.stdout.decode("utf-8"))
         if deploy.returncode == 0:
             typer.secho(
@@ -168,8 +182,8 @@ def diff_deploy(
             if validate and typer.confirm(
                 "Do you want to continue with the deployment?"
             ):
-                with console.status(f"Deploying to org {selected_org}..."):
-                    quick_deploy = sfdx_deploy(manifest_file, selected_org, False)
+                with console.status(f"Deploying to org {org}..."):
+                    quick_deploy = sfdx_deploy(manifest_file, org, False)
                 quick_deploy_result = json.loads(quick_deploy.stdout.decode("utf-8"))
                 if quick_deploy.returncode == 0:
                     typer.secho("Deployment successful!", fg=typer.colors.GREEN)
@@ -182,7 +196,6 @@ def diff_deploy(
                     )
 
         else:
-            # pprint(deploy_result)
             typer.secho(
                 "An error occurred while deploying.", err=True, fg=typer.colors.RED
             )
