@@ -1,14 +1,10 @@
 import json
 import os
-import subprocess
-from time import sleep
 from typing import Annotated
-import click
-import click.shell_completion
 import typer
 from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 from rich.console import Console
-from rich.pretty import pprint
 from rich.table import Table
 
 
@@ -21,7 +17,7 @@ from sfdx_commands import (
     sfdx_get_orgs,
     sfdx_sgd,
 )
-from utils import component_failures_table
+from utils import component_failures_table, metadata_table, parse_package
 
 
 console = Console()
@@ -106,6 +102,24 @@ def diff_deploy(
         console.log(error, style="blink red")
         raise typer.Exit()
 
+    # --------------- Show diff metadata table ---------------
+    choices: list[Choice] = [
+        Choice(name="Yes, show me the table", value=True),
+        Choice(name="No, thanks. I'll check the manifest(s) myself", value=False),
+    ]
+    show_metadata_table: bool = inquirer.select(
+        message="Do you want to see the metadata that will be deployed?",
+        choices=choices,
+        default=True,
+    ).execute()
+
+    if show_metadata_table:
+        table: Table = metadata_table(
+            parse_package(os.path.join(output_dir, "package/package.xml"))
+        )
+        console.print(table)
+
+    # --------------- Select org to deploy to ---------------
     console.rule("Org selection")
     selected_org = inquirer.select(
         message="Select an org to deploy to:",
