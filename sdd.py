@@ -56,6 +56,14 @@ def diff_deploy(
     source: Annotated[
         str, typer.Argument(help="The source branch or commit sha to diff from.")
     ] = None,
+    generate_manifest_only: Annotated[
+        bool,
+        typer.Option(
+            "--generate-only",
+            "-g",
+            help="Generate the manifest only, without deploying.",
+        ),
+    ] = False,
 ):
     """
     Deploy the diff metadata of two branches, to an org.
@@ -118,6 +126,13 @@ def diff_deploy(
             parse_package(os.path.join(output_dir, "package/package.xml"))
         )
         console.print(table)
+
+    if generate_manifest_only:
+        console.print(
+            f'Manifests generated successfully in folder "{os.path.abspath(output_dir)}". \nNo deployment will be performed.',
+            style="bold green",
+        )
+        raise typer.Exit()
 
     # --------------- Select org to deploy to ---------------
     console.rule("Org selection")
