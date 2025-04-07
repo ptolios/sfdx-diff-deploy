@@ -73,6 +73,13 @@ def diff_deploy(
             help="The org to deploy to. If not specified, the current org will be used and if no current org is set, you will be prompted to select one.",
         ),
     ] = None,
+    validate: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate the deployment without applying it.",
+        ),
+    ] = False,
 ):
     """
     Deploy the diff metadata of two branches, to an org.
@@ -160,7 +167,20 @@ def diff_deploy(
 
     typer.secho(f"Selected org: {org}", fg=typer.colors.YELLOW)
 
-    validate: bool = typer.confirm("Do you want to validate the deployment?")
+    if not validate:
+        validate = inquirer.select(
+            message="What do you want to do next?",
+            choices=[
+                Choice(name="Validate", value=True),
+                Choice(name="Deploy", value=False),
+                Choice(name="Exit", value=None),
+            ],
+            default=True,
+        ).execute()
+
+    if validate is None:
+        raise typer.Exit()
+
     message: str = (
         f"{'Validating deployment' if validate else 'Deploying'} to org '{org}'..."
     )
@@ -178,23 +198,6 @@ def diff_deploy(
                 f"{'Validation' if validate else 'Deployment'} successful!",
                 fg=typer.colors.GREEN,
             )
-
-            if validate and typer.confirm(
-                "Do you want to continue with the deployment?"
-            ):
-                with console.status(f"Deploying to org {org}..."):
-                    quick_deploy = sfdx_deploy(manifest_file, org, False)
-                quick_deploy_result = json.loads(quick_deploy.stdout.decode("utf-8"))
-                if quick_deploy.returncode == 0:
-                    typer.secho("Deployment successful!", fg=typer.colors.GREEN)
-                else:
-                    typer.secho(quick_deploy_result)
-                    typer.secho(
-                        "An error occurred while deploying.",
-                        err=True,
-                        fg=typer.colors.RED,
-                    )
-
         else:
             typer.secho(
                 "An error occurred while deploying.", err=True, fg=typer.colors.RED
