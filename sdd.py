@@ -1,14 +1,10 @@
 import json
 import os
-import subprocess
-from time import sleep
 from typing import Annotated
-import click
-import click.shell_completion
 import typer
 from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 from rich.console import Console
-from rich.pretty import pprint
 from rich.table import Table
 
 
@@ -18,10 +14,11 @@ from sfdx_commands import (
     sfdx_check_sf_project,
     sfdx_check_sgd_plugin_installed,
     sfdx_deploy,
+    sfdx_get_default_org,
     sfdx_get_orgs,
     sfdx_sgd,
 )
-from utils import component_failures_table
+from utils import component_failures_table, metadata_table, parse_package
 
 
 console = Console()
@@ -60,6 +57,29 @@ def diff_deploy(
     source: Annotated[
         str, typer.Argument(help="The source branch or commit sha to diff from.")
     ] = None,
+    generate_manifest_only: Annotated[
+        bool,
+        typer.Option(
+            "--generate-only",
+            "-g",
+            help="Generate the manifest only, without deploying.",
+        ),
+    ] = False,
+    org: Annotated[
+        str,
+        typer.Option(
+            "--target-org",
+            "-o",
+            help="The org to deploy to. If not specified, the current org will be used and if no current org is set, you will be prompted to select one.",
+        ),
+    ] = None,
+    validate: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate the deployment without applying it.",
+        ),
+    ] = False,
 ):
     """
     Deploy the diff metadata of two branches, to an org.
@@ -71,7 +91,7 @@ def diff_deploy(
 
     branches_info: dict = git_get_branches()
     local_branches: list[str] = branches_info.get("branches")
-    current_branch: str = branches_info.get("default")
+    current_branch: str = branches_info.get("current")
     local_branches_without_selected: list[str] = local_branches.copy()
 
     if source is None:
@@ -106,16 +126,63 @@ def diff_deploy(
         console.log(error, style="blink red")
         raise typer.Exit()
 
-    console.rule("Org selection")
-    selected_org = inquirer.select(
-        message="Select an org to deploy to:",
-        choices=sfdx_get_orgs(),
-        default=None,
+    # --------------- Show diff metadata table ---------------
+    choices: list[Choice] = [
+        Choice(name="Yes, show me the table", value=True),
+        Choice(name="No, thanks. I'll check the manifest(s) myself", value=False),
+    ]
+    show_metadata_table: bool = inquirer.select(
+        message="Do you want to see the metadata that will be deployed?",
+        choices=choices,
+        default=True,
     ).execute()
 
-    validate: bool = typer.confirm("Do you want to validate the deployment?")
+    if show_metadata_table:
+        table: Table = metadata_table(
+            parse_package(os.path.join(output_dir, "package/package.xml"))
+        )
+        console.print(table)
+
+    if generate_manifest_only:
+        console.print(
+            f'Manifests generated successfully in folder "{os.path.abspath(output_dir)}". \nNo deployment will be performed.',
+            style="bold green",
+        )
+        raise typer.Exit()
+
+    # --------------- Select org to deploy to ---------------
+    console.rule("Org selection")
+
+    if not typer.confirm("Do you want to proceed with the deployment?"):
+        raise typer.Exit()
+
+    if org is None:
+        org = sfdx_get_default_org()
+        if org is None:
+            org = inquirer.select(
+                message="Select an org to deploy to:",
+                choices=sfdx_get_orgs(),
+                default=None,
+            ).execute()
+
+    typer.secho(f"Selected org: {org}", fg=typer.colors.YELLOW)
+
+    if not validate:
+        validate = inquirer.select(
+            message="What do you want to do next?",
+            choices=[
+                Choice(name="Validate", value=True),
+                Choice(name="Deploy", value=False),
+                Choice(name="Exit", value=None),
+            ],
+            default=True,
+        ).execute()
+
+    if validate is None:
+        raise typer.Exit()
+
     message: str = (
-        f"{'Validating deployment' if validate else 'Deploying'} to org '{selected_org}'..."
+        f"{'Validating deployment' if validate else 'Deploying'} to org '{org}'..."
     )
 
     if output_dir:
@@ -124,32 +191,14 @@ def diff_deploy(
 
         manifest_file: str = os.path.join(output_dir, "package/package.xml")
         with console.status(message):
-            deploy = sfdx_deploy(manifest_file, selected_org, validate)
+            deploy = sfdx_deploy(manifest_file, org, validate)
             deploy_result = json.loads(deploy.stdout.decode("utf-8"))
         if deploy.returncode == 0:
             typer.secho(
                 f"{'Validation' if validate else 'Deployment'} successful!",
                 fg=typer.colors.GREEN,
             )
-
-            if validate and typer.confirm(
-                "Do you want to continue with the deployment?"
-            ):
-                with console.status(f"Deploying to org {selected_org}..."):
-                    quick_deploy = sfdx_deploy(manifest_file, selected_org, False)
-                quick_deploy_result = json.loads(quick_deploy.stdout.decode("utf-8"))
-                if quick_deploy.returncode == 0:
-                    typer.secho("Deployment successful!", fg=typer.colors.GREEN)
-                else:
-                    typer.secho(quick_deploy_result)
-                    typer.secho(
-                        "An error occurred while deploying.",
-                        err=True,
-                        fg=typer.colors.RED,
-                    )
-
         else:
-            # pprint(deploy_result)
             typer.secho(
                 "An error occurred while deploying.", err=True, fg=typer.colors.RED
             )

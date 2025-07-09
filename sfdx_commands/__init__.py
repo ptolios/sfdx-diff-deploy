@@ -100,6 +100,8 @@ def sfdx_deploy(
         manifest_file_path,
         "-o",
         org,
+        "-l",
+        test_level,
         "--json",
     ]
 
@@ -132,3 +134,15 @@ def sfdx_quick_deploy(job_id: str, org: str):
         params,
         capture_output=True,
     )
+
+
+def sfdx_get_default_org() -> str:
+    """
+    Get the default org from the Salesforce CLI.
+    """
+    output = subprocess.run(
+        ["sf", "config", "get", "target-org", "--json"], capture_output=True
+    )
+    org_output: str = output.stdout.decode("utf-8")
+    org_data: dict = json.loads(org_output).get("result")[0]
+    return org_data.get("value")

@@ -9,8 +9,8 @@ def git_get_branches() -> list[str]:
     ]
     for branch in branches.splitlines():
         if branch.startswith("* "):
-            default_branch = branch.removeprefix("* ")
-    return {"branches": trimmedBranches, "default": default_branch}
+            current_branch = branch.removeprefix("* ")
+    return {"branches": trimmedBranches, "current": current_branch}
 
 
 def git_checkout(branch: str):
